@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Interview Recordings</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .recordings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .recording-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+
+        .recording-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 12px rgba(0,0,0,0.2);
+        }
+
+        .recording-title {
+            font-size: 1.1em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+            word-break: break-all;
+        }
+
+        .recording-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        video {
+            width: 100%;
+            border-radius: 8px;
+            background: #000;
+            margin-bottom: 15px;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+
+        .btn-download {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-download:hover {
+            background: #5568d3;
+        }
+
+        .btn-delete {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-delete:hover {
+            background: #e53e3e;
+        }
+
+        .no-recordings {
+            text-align: center;
+            color: white;
+            font-size: 1.5em;
+            margin-top: 50px;
+            background: rgba(255,255,255,0.1);
+            padding: 40px;
+            border-radius: 12px;
+        }
+
+        .stats {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .stats h2 {
+            margin-bottom: 10px;
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2em;
+            margin-top: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎥 Interview Recordings</h1>
+        
+        <div class="stats" id="stats" style="display: none;">
+            <h2>📊 Statistics</h2>
+            <p>Total Recordings: <strong id="totalCount">0</strong></p>
+            <p>Total Size: <strong id="totalSize">0 MB</strong></p>
+        </div>
+
+        <div class="loading" id="loading">Loading recordings...</div>
+        <div class="recordings-grid" id="recordingsGrid"></div>
+        <div class="no-recordings" id="noRecordings" style="display: none;">
+            No recordings found. Complete an interview to see recordings here!
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3001/api';
+
+        async function loadRecordings() {
+            try {
+                const response = await fetch(`${API_BASE}/recordings`);
+                const data = await response.json();
+
+                const loading = document.getElementById('loading');
+                const grid = document.getElementById('recordingsGrid');
+                const noRecordings = document.getElementById('noRecordings');
+                const stats = document.getElementById('stats');
+
+                loading.style.display = 'none';
+
+                if (data.recordings && data.recordings.length > 0) {
+                    stats.style.display = 'block';
+                    document.getElementById('totalCount').textContent = data.count;
+                    
+                    const totalSizeMB = data.recordings.reduce((sum, r) => sum + r.size, 0) / (1024 * 1024);
+                    document.getElementById('totalSize').textContent = totalSizeMB.toFixed(2);
+
+                    data.recordings.forEach(recording => {
+                        const card = createRecordingCard(recording);
+                        grid.appendChild(card);
+                    });
+                } else {
+                    noRecordings.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading recordings:', error);
+                document.getElementById('loading').textContent = 'Error loading recordings. Make sure the server is running.';
+            }
+        }
+
+        function createRecordingCard(recording) {
+            const card = document.createElement('div');
+            card.className = 'recording-card';
+
+            const date = new Date(recording.createdAt);
+            const formattedDate = date.toLocaleString();
+            const sizeMB = (recording.size / (1024 * 1024)).toFixed(2);
+
+            card.innerHTML = `
+                <div class="recording-title">${recording.fileName}</div>
+                <div class="recording-info">
+                    <span>📅 ${formattedDate}</span>
+                    <span>💾 ${sizeMB} MB</span>
+                </div>
+                <video controls>
+                    <source src="${recording.url}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+                <div class="buttons">
+                    <button class="btn btn-download" onclick="downloadRecording('${recording.fileName}')">
+                        ⬇️ Download
+                    </button>
+                    <button class="btn btn-delete" onclick="deleteRecording('${recording.fileName}')">
+                        🗑️ Delete
+                    </button>
+                </div>
+            `;
+
+            return card;
+        }
+
+        function downloadRecording(fileName) {
+            const url = `/recordings/${fileName}`;
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+        }
+
+        async function deleteRecording(fileName) {
+            if (!confirm(`Are you sure you want to delete ${fileName}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/recordings/${fileName}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('Recording deleted successfully!');
+                    location.reload();
+                } else {
+                    alert('Failed to delete recording: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error deleting recording:', error);
+                alert('Error deleting recording');
+            }
+        }
+
+        // Load recordings on page load
+        loadRecordings();
+    </script>
+</body>
+</html>

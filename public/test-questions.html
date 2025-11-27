@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Question Generator Test - HireMatic</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4285F4 0%, #357ae8 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 16px;
+        }
+        
+        .controls {
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .control-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .control-group label {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .control-group select {
+            padding: 12px 20px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 16px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            min-width: 200px;
+        }
+        
+        .control-group select:hover {
+            border-color: #4285F4;
+        }
+        
+        .control-group select:focus {
+            outline: none;
+            border-color: #4285F4;
+            box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.1);
+        }
+        
+        .btn {
+            padding: 12px 30px;
+            background: #4285F4;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn:hover {
+            background: #357ae8;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(66, 133, 244, 0.3);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn:disabled {
+            background: #adb5bd;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status {
+            padding: 15px 30px;
+            background: #e7f3ff;
+            border-left: 4px solid #4285F4;
+            margin: 20px 30px;
+            border-radius: 4px;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+        
+        .questions-container {
+            padding: 30px;
+        }
+        
+        .question-card {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+            animation: slideIn 0.4s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .question-card:hover {
+            border-color: #4285F4;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        
+        .question-header {
+            display: flex;
+            align-items: start;
+            gap: 15px;
+        }
+        
+        .question-number {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #4285F4 0%, #357ae8 100%);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+        
+        .question-content {
+            flex: 1;
+        }
+        
+        .question-text {
+            font-size: 16px;
+            color: #212529;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+        
+        .question-meta {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+        
+        .badge-type {
+            background: #e7f3ff;
+            color: #0056b3;
+        }
+        
+        .badge-difficulty {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+        
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        .empty-state h3 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .empty-state p {
+            font-size: 16px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4285F4;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 AI Question Generator</h1>
+            <p>HireMatic - Interview Question Generation System</p>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="roleSelect">Select Role:</label>
+                <select id="roleSelect">
+                    <option value="software engineer">Software Engineer</option>
+                    <option value="data scientist">Data Scientist</option>
+                    <option value="frontend developer">Frontend Developer</option>
+                    <option value="backend developer">Backend Developer</option>
+                    <option value="devops engineer">DevOps Engineer</option>
+                    <option value="machine learning engineer">ML Engineer</option>
+                    <option value="full stack developer">Full Stack Developer</option>
+                    <option value="product manager">Product Manager</option>
+                </select>
+                
+                <button id="generateBtn" class="btn">Generate Questions</button>
+                <button id="testApiBtn" class="btn" style="background: #28a745;">Test API</button>
+            </div>
+        </div>
+        
+        <div id="statusMessage"></div>
+        
+        <div id="questionsContainer" class="questions-container">
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3>No Questions Generated</h3>
+                <p>Select a role and click "Generate Questions" to start</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        
+        const roleSelect = document.getElementById('roleSelect');
+        const generateBtn = document.getElementById('generateBtn');
+        const testApiBtn = document.getElementById('testApiBtn');
+        const questionsContainer = document.getElementById('questionsContainer');
+        const statusMessage = document.getElementById('statusMessage');
+        
+        // Test API connectivity
+        testApiBtn.addEventListener('click', async () => {
+            showStatus('Testing API connection...', 'info');
+            
+            try {
+                const response = await fetch(`${API_URL}/`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showStatus(`✅ API Connected: ${data.message}`, 'success');
+                } else {
+                    showStatus('❌ API Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showStatus('❌ Cannot connect to API. Make sure Python service is running on port 8000.', 'error');
+                console.error(error);
+            }
+        });
+        
+        // Generate questions
+        generateBtn.addEventListener('click', async () => {
+            const role = roleSelect.value;
+            
+            showStatus(`Generating questions for ${role}...`, 'info');
+            generateBtn.disabled = true;
+            
+            questionsContainer.innerHTML = '<div class="loading"><div class="spinner"></div><p>Generating questions...</p></div>';
+            
+            try {
+                const response = await fetch(`${API_URL}/generate-multiple`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        role: role,
+                        num_questions: 10
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.questions) {
+                    displayQuestions(data.questions, data.role);
+                    showStatus(`✅ Successfully generated ${data.count} questions for ${data.role}`, 'success');
+                } else {
+                    showStatus('❌ Error: ' + (data.error || 'Failed to generate questions'), 'error');
+                    showEmptyState();
+                }
+            } catch (error) {
+                showStatus('❌ Cannot connect to API. Make sure Python service is running on port 8000.', 'error');
+                console.error(error);
+                showEmptyState();
+            } finally {
+                generateBtn.disabled = false;
+            }
+        });
+        
+        function displayQuestions(questions, role) {
+            questionsContainer.innerHTML = questions.map((q, index) => `
+                <div class="question-card" style="animation-delay: ${index * 0.05}s">
+                    <div class="question-header">
+                        <div class="question-number">${q.id}</div>
+                        <div class="question-content">
+                            <div class="question-text">${q.text}</div>
+                            <div class="question-meta">
+                                <span class="badge badge-type">${q.type}</span>
+                                <span class="badge badge-difficulty">${q.difficulty}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function showEmptyState() {
+            questionsContainer.innerHTML = `
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h3>No Questions Generated</h3>
+                    <p>Select a role and click "Generate Questions" to start</p>
+                </div>
+            `;
+        }
+        
+        function showStatus(message, type = 'info') {
+            statusMessage.innerHTML = `<div class="status ${type}">${message}</div>`;
+            setTimeout(() => {
+                if (type !== 'error') {
+                    statusMessage.innerHTML = '';
+                }
+            }, 5000);
+        }
+        
+        // Auto-test on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                testApiBtn.click();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

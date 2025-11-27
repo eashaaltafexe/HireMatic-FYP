@@ -1,0 +1,14 @@
+{
+  "filtering_stats": {
+    "parsed": 2459,
+    "filtered_length": 604,
+    "filtered_behavioral": 1,
+    "filtered_generic": 0,
+    "filtered_format": 26,
+    "accepted": 1828
+  },
+  "training_samples": 1828,
+  "model": "gpt2",
+  "epochs": 3,
+  "approach": "technical_only_improved"
+}

@@ -1,0 +1,1 @@
+pip install numpy pygame sounddevice soundfile faster-whisper gtts google-generativeai
