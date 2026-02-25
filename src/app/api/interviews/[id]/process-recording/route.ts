@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth } from '@/application';
-import RecordingProcessorService from '@/application/services/recordingProcessor';
+import { verifyAuthToken } from '@/application';
+// import RecordingProcessorService from '@/application/services/recordingProcessor';
 import Interview from '@/data-access/models/Interview';
 
 /**
@@ -14,15 +14,25 @@ export async function POST(
 ) {
   try {
     // Authentication check
-    const authResult = await verifyAuth(request);
-    if (!authResult.isValid || !authResult.user) {
+    const token = request.cookies.get('token')?.value || 
+                  request.headers.get('Authorization')?.replace('Bearer ', '');
+
+    if (!token) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    const user = authResult.user;
+    const decoded = verifyAuthToken(token);
+    if (!decoded) {
+      return NextResponse.json(
+        { error: 'Invalid or expired token' },
+        { status: 401 }
+      );
+    }
+
+    const user = decoded;
 
     // Only HR/Admin can process recordings
     if (user.role !== 'hr' && user.role !== 'admin') {
@@ -54,55 +64,11 @@ export async function POST(
 
     console.log('📹 Recording URL:', interview.recording.url);
 
-    // Process the recording
-    const result = await RecordingProcessorService.processRecording(
-      interview.recording.url,
-      interviewId
+    // TODO: Process the recording - RecordingProcessorService not implemented
+    return NextResponse.json(
+      { error: 'Recording processing service not implemented yet' },
+      { status: 501 }
     );
-
-    console.log('✅ Recording processed successfully');
-    console.log('📝 Transcript length:', result.transcript.words.length, 'words');
-    console.log('🎯 Overall score:', result.analysis.overallScore);
-    console.log('💡 Recommendation:', result.analysis.recommendation);
-
-    // Save transcript and analysis to interview document
-    interview.transcript = {
-      text: result.transcript.fullText,
-      words: result.transcript.words,
-      language: result.transcript.language,
-      confidence: result.transcript.confidence
-    };
-
-    interview.analysis = {
-      communicationScore: result.analysis.communicationScore,
-      technicalScore: result.analysis.technicalScore,
-      confidenceLevel: result.analysis.confidenceLevel,
-      enthusiasm: result.analysis.enthusiasm,
-      professionalismScore: result.analysis.professionalismScore,
-      overallScore: result.analysis.overallScore,
-      recommendation: result.analysis.recommendation,
-      strengths: result.analysis.strengths,
-      weaknesses: result.analysis.weaknesses,
-      detailedFeedback: result.analysis.detailedFeedback,
-      speakingMetrics: result.analysis.speakingMetrics,
-      technicalKeywords: result.analysis.technicalKeywords,
-      processedAt: new Date()
-    };
-
-    await interview.save();
-
-    console.log('💾 Analysis saved to database');
-
-    return NextResponse.json({
-      success: true,
-      message: 'Recording processed successfully',
-      data: {
-        interviewId,
-        transcript: result.transcript,
-        analysis: result.analysis,
-        speakingMetrics: result.analysis.speakingMetrics
-      }
-    });
 
   } catch (error) {
     console.error('❌ Error processing recording:', error);
@@ -126,10 +92,20 @@ export async function GET(
 ) {
   try {
     // Authentication check
-    const authResult = await verifyAuth(request);
-    if (!authResult.isValid || !authResult.user) {
+    const token = request.cookies.get('token')?.value || 
+                  request.headers.get('Authorization')?.replace('Bearer ', '');
+
+    if (!token) {
       return NextResponse.json(
         { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const decoded = verifyAuthToken(token);
+    if (!decoded) {
+      return NextResponse.json(
+        { error: 'Invalid or expired token' },
         { status: 401 }
       );
     }

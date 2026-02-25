@@ -1,0 +1,13 @@
+# HireMatic - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# PDF Generation
+reportlab>=4.0.0
+
+# MongoDB Connection
+pymongo>=4.0.0
+
+# HTTP Requests (for Gemini API)
+requests>=2.31.0
+
+

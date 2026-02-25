@@ -88,7 +88,7 @@ export async function POST(req: Request) {
       answers: interviewAnswers, // Can be either transcript format or legacy answers
       overallScore: overallScore || 0,
       overallFeedback: overallFeedback || 'Transcript recorded - pending review',
-      aiInterviewerId: 'gemini-pro'
+      aiInterviewerId: 'TalkHire AI'
     };
 
     // Update application status if needed
@@ -109,21 +109,38 @@ export async function POST(req: Request) {
     await application.save();
 
     // Trigger evaluation and PDF generation (Python script)
+    console.log('🎯 [AutoEval] Triggering evaluation for application:', applicationId);
     try {
       const { spawn } = require('child_process');
       const scriptPath = require('path').resolve(process.cwd(), 'scripts', 'auto_evaluate_and_report.py');
+      console.log('📝 [AutoEval] Script path:', scriptPath);
+      console.log('🐍 [AutoEval] Starting Python evaluation script...');
+      
       const python = spawn('python', [scriptPath]);
-      python.stdout.on('data', (data) => { console.log('[AutoEval]', data.toString()); });
-      python.stderr.on('data', (data) => { console.error('[AutoEval][ERR]', data.toString()); });
-      python.on('close', (code) => {
+      
+      python.stdout.on('data', (data: Buffer) => { 
+        console.log('[AutoEval] 📊', data.toString().trim()); 
+      });
+      
+      python.stderr.on('data', (data: Buffer) => { 
+        console.error('[AutoEval] ⚠️', data.toString().trim()); 
+      });
+      
+      python.on('close', (code: number | null) => {
         if (code === 0) {
-          console.log('[AutoEval] PDF generation complete.');
+          console.log('✅ [AutoEval] PDF generation completed successfully!');
         } else {
-          console.error('[AutoEval] PDF generation failed.');
+          console.error(`❌ [AutoEval] PDF generation failed with code: ${code}`);
         }
       });
+      
+      python.on('error', (err: Error) => {
+        console.error('❌ [AutoEval] Failed to spawn Python process:', err.message);
+      });
+      
+      console.log('✅ [AutoEval] Evaluation script triggered successfully');
     } catch (err) {
-      console.error('[AutoEval] Failed to start evaluation script:', err);
+      console.error('❌ [AutoEval] Failed to start evaluation script:', err);
     }
 
     return NextResponse.json({

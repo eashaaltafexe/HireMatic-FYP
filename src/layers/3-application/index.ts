@@ -10,10 +10,13 @@
  */
 
 // Export application services (server-side only)
+// Export application services (server-side only)
 export * from './services/auth';
 export * from './services/interviewScheduler';
 export * from './services/notificationService';
 export * from './services/otpService';
 export * from './services/agoraService';
-export * from './services/recordingProcessor';
+// export * from './services/recordingProcessor'; // Empty file - commented out
+export * from './services/megaStorageService';
+export { authMiddleware, optionalAuthMiddleware, verifyToken as verifyAuthToken } from './middleware/auth';
 // Note: agoraClient is client-side only, import directly when needed

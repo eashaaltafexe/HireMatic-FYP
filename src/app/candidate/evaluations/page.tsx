@@ -11,6 +11,7 @@ type Evaluation = {
   interviewer?: string;
   overallScore: number;
   status: string;
+  hiringDecision?: string;
   categories?: Array<{ name: string; score: number; maxScore: number; feedback: string }>;
   feedback?: string;
   recommendations?: string[];
@@ -21,19 +22,44 @@ export default function EvaluationsPage() {
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [selectedEvaluation, setSelectedEvaluation] = useState<Evaluation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [triggering, setTriggering] = useState(false);
+
+  const fetchEvaluations = async () => {
+    setLoading(true);
+    try {
+      console.log('🔍 [Evaluations Page] Fetching evaluations...');
+      const res = await fetch('/api/evaluations');
+      const data = await res.json();
+      console.log('📦 [Evaluations Page] Received', data.length, 'evaluations');
+      setEvaluations(data);
+    } catch (err) {
+      console.error('❌ [Evaluations Page] Error:', err);
+      setEvaluations([]);
+    }
+    setLoading(false);
+  };
+
+  const triggerEvaluation = async () => {
+    setTriggering(true);
+    try {
+      console.log('🎯 [Evaluations Page] Triggering evaluation script...');
+      const res = await fetch('/api/evaluations/trigger', { method: 'POST' });
+      const data = await res.json();
+      console.log('📦 [Evaluations Page] Trigger response:', data);
+      
+      if (data.success) {
+        alert('Evaluation script triggered! Results will appear in 1-2 minutes. Click "Refresh" to check.');
+      } else {
+        alert('Failed to trigger evaluation: ' + data.error);
+      }
+    } catch (err) {
+      console.error('❌ [Evaluations Page] Trigger error:', err);
+      alert('Error triggering evaluation. Check console for details.');
+    }
+    setTriggering(false);
+  };
 
   useEffect(() => {
-    async function fetchEvaluations() {
-      setLoading(true);
-      try {
-        const res = await fetch('/api/evaluations');
-        const data = await res.json();
-        setEvaluations(data);
-      } catch (err) {
-        setEvaluations([]);
-      }
-      setLoading(false);
-    }
     fetchEvaluations();
   }, []);
 
@@ -56,16 +82,50 @@ export default function EvaluationsPage() {
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold">Evaluation Reports</h1>
-        <p className="text-gray-600 mt-1">View your interview and assessment evaluations</p>
+      <div className="mb-8 flex justify-between items-start">
+        <div>
+          <h1 className="text-2xl font-bold">Evaluation Reports</h1>
+          <p className="text-gray-600 mt-1">View your interview and assessment evaluations</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={fetchEvaluations}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Loading...' : '🔄 Refresh'}
+          </button>
+          <button
+            onClick={triggerEvaluation}
+            disabled={triggering}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            {triggering ? 'Triggering...' : '⚡ Generate Evaluations'}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Evaluations List */}
         <div className="lg:col-span-1 space-y-4">
           {loading ? (
-            <div>Loading...</div>
+            <div className="bg-white border rounded-lg p-4">
+              <p className="text-gray-500">Loading evaluations...</p>
+            </div>
+          ) : evaluations.length === 0 ? (
+            <div className="bg-white border rounded-lg p-6">
+              <p className="text-gray-600 mb-4">No evaluations found.</p>
+              <p className="text-sm text-gray-500 mb-4">
+                If you just completed an interview, click "Generate Evaluations" to process your results.
+              </p>
+              <button
+                onClick={triggerEvaluation}
+                disabled={triggering}
+                className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400"
+              >
+                {triggering ? 'Processing...' : '⚡ Generate Evaluations'}
+              </button>
+            </div>
           ) : (
             evaluations.map((evaluation) => (
               <div
@@ -127,7 +187,7 @@ export default function EvaluationsPage() {
               {/* Overall Rating */}
               <div className="py-6 border-b border-gray-200">
                 <h3 className="text-lg font-medium mb-4">Overall Rating</h3>
-                <div className="flex items-center">
+                <div className="flex items-center mb-4">
                   <div className="flex-1 bg-gray-200 rounded-full h-4">
                     <div
                       className="bg-blue-500 h-4 rounded-full"
@@ -138,6 +198,35 @@ export default function EvaluationsPage() {
                     {selectedEvaluation.overallScore}/100
                   </span>
                 </div>
+                
+                {/* Hiring Decision */}
+                {selectedEvaluation.hiringDecision && (
+                  <div className={`mt-4 p-4 rounded-lg ${
+                    selectedEvaluation.hiringDecision === 'RECOMMENDED' 
+                      ? 'bg-green-50 border border-green-200' 
+                      : 'bg-red-50 border border-red-200'
+                  }`}>
+                    <div className="flex items-center">
+                      <span className={`text-lg font-bold ${
+                        selectedEvaluation.hiringDecision === 'RECOMMENDED' 
+                          ? 'text-green-700' 
+                          : 'text-red-700'
+                      }`}>
+                        {selectedEvaluation.hiringDecision === 'RECOMMENDED' ? '✓' : '✗'} {selectedEvaluation.hiringDecision}
+                      </span>
+                    </div>
+                    <p className={`mt-2 text-sm ${
+                      selectedEvaluation.hiringDecision === 'RECOMMENDED' 
+                        ? 'text-green-600' 
+                        : 'text-red-600'
+                    }`}>
+                      {selectedEvaluation.hiringDecision === 'RECOMMENDED' 
+                        ? `The candidate scored ${selectedEvaluation.overallScore}/100, meeting the minimum threshold of 70. Recommended to proceed to the next round.`
+                        : `The candidate scored ${selectedEvaluation.overallScore}/100, which is below the minimum threshold of 70. Not recommended for hire at this time.`
+                      }
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Category Scores */}

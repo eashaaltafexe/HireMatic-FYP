@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { storeGeneratedQuestions } from '@/layers/2-business-logic/ai-services/autoQuestionGenerator';
 
 /**
  * API Route to generate interview questions using GPT-2 model
@@ -7,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { role, num_questions = 10 } = body;
+    const { role, num_questions = 10, applicationId } = body;
 
     if (!role) {
       return NextResponse.json(
@@ -40,6 +41,28 @@ export async function POST(request: NextRequest) {
         { success: false, error: data.error },
         { status: 500 }
       );
+    }
+
+    // If applicationId is provided, store the questions in the database
+    if (applicationId && data.questions && data.questions.length > 0) {
+      console.log(`Storing ${data.questions.length} questions for application ${applicationId}`);
+      
+      const questionsToStore = data.questions.map((q: any, index: number) => ({
+        id: index + 1,
+        text: q.text,
+        type: q.type || 'technical',
+        difficulty: q.difficulty || 'medium',
+        jobField: role,
+        generatedAt: new Date()
+      }));
+
+      const stored = await storeGeneratedQuestions(applicationId, questionsToStore);
+      
+      if (stored) {
+        console.log(`✅ Successfully stored questions for application ${applicationId}`);
+      } else {
+        console.warn(`⚠️ Failed to store questions for application ${applicationId}`);
+      }
     }
 
     return NextResponse.json({

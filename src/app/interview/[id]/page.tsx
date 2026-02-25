@@ -64,16 +64,23 @@ export default function InterviewRoomPage() {
 
   const fetchQuestions = async () => {
     try {
+      console.log('🔍 Fetching questions for application:', interview?.applicationId);
       const token = localStorage.getItem('token');
       const response = await fetch(`/api/applications/${interview?.applicationId}/questions`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const result = await response.json();
+      console.log('📦 Questions API response:', result);
+      
       if (result.success && result.data.questions) {
+        console.log('✅ Questions loaded:', result.data.questions.length);
+        console.log('📋 First question:', result.data.questions[0]?.text);
         setQuestions(result.data.questions);
+      } else {
+        console.error('❌ Failed to load questions:', result);
       }
     } catch (error) {
-      console.error('Error fetching questions:', error);
+      console.error('❌ Error fetching questions:', error);
     }
   };
 
@@ -125,20 +132,27 @@ export default function InterviewRoomPage() {
 
   const handleInterviewComplete = async (answers: any[]) => {
     try {
+      console.log('🏁 [Interview Complete] Starting completion process...');
+      console.log('📊 [Interview Complete] Answers count:', answers.length);
+      console.log('📋 [Interview Complete] Application ID:', interview?.applicationId);
+      
       const token = localStorage.getItem('token');
       const overallScore = answers.length > 0
         ? Math.round(answers.reduce((sum, ans) => sum + (ans.evaluation?.score || 0), 0) / answers.length)
         : 0;
 
       if (!interview?.applicationId) {
+        console.error('❌ [Interview Complete] Application ID missing!');
         toast.error('Application ID missing. Cannot save answers.');
         return;
       }
       if (!answers || answers.length === 0) {
+        console.error('❌ [Interview Complete] No answers to save!');
         toast.error('No answers to save.');
         return;
       }
 
+      console.log('📤 [Interview Complete] Sending answers to API...');
       const response = await fetch('/api/interviews/answers', {
         method: 'POST',
         headers: {
@@ -154,16 +168,24 @@ export default function InterviewRoomPage() {
       });
 
       const result = await response.json();
+      console.log('📦 [Interview Complete] API Response:', result);
+      
       if (!response.ok || !result.success) {
-        console.error('Failed to save interview answers:', result.error || result);
+        console.error('❌ [Interview Complete] Failed to save:', result.error || result);
         toast.error(`Failed to save interview answers: ${result.error || 'Unknown error'}`);
         return;
       }
 
-      toast.success('Interview completed and answers saved!');
-      router.push('/candidate/applications');
+      console.log('✅ [Interview Complete] Answers saved successfully!');
+      console.log('🎯 [Interview Complete] Evaluation script should be running now...');
+      toast.success('Interview completed! Evaluation is being generated...');
+      
+      // Wait a moment before redirecting to allow evaluation to start
+      setTimeout(() => {
+        router.push('/candidate/applications');
+      }, 2000);
     } catch (error) {
-      console.error('Error saving answers:', error);
+      console.error('❌ [Interview Complete] Exception:', error);
       toast.error('Failed to save interview answers (exception)');
     }
   };
@@ -206,6 +228,19 @@ export default function InterviewRoomPage() {
           <Loader2 className="w-16 h-16 animate-spin text-blue-500 mx-auto mb-4" />
           <h2 className="text-2xl font-semibold text-white mb-2">Preparing Interview...</h2>
           <p className="text-gray-400">Setting up your connection</p>
+        </div>
+      </div>
+    );
+  }
+
+  // CRITICAL: Wait for questions to load before starting interview
+  if (!questions || questions.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+        <div className="text-center">
+          <Loader2 className="w-16 h-16 animate-spin text-blue-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-semibold text-white mb-2">Loading Interview Questions...</h2>
+          <p className="text-gray-400">Preparing your 10 questions</p>
         </div>
       </div>
     );

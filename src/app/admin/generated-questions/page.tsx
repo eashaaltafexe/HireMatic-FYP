@@ -51,6 +51,7 @@ export default function ApplicationQuestionsPage() {
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [filter, setFilter] = useState<'all' | 'shortlisted'>('shortlisted');
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     fetchApplications();
@@ -61,7 +62,7 @@ export default function ApplicationQuestionsPage() {
       setLoading(true);
       const token = localStorage.getItem('token');
       
-      console.log('Fetching applications with questions...');
+      console.log('Fetching applications...');
       
       const response = await fetch('/api/admin/applications', {
         headers: {
@@ -75,24 +76,23 @@ export default function ApplicationQuestionsPage() {
       if (result.success) {
         console.log('Total applications:', result.data.length);
         
-        // Filter to show only applications with generated questions
-        const appsWithQuestions = result.data.filter((app: Application) => {
-          const hasQuestions = app.generatedQuestions && app.generatedQuestions.length > 0;
-          if (hasQuestions) {
-            console.log(`App ${app._id} has ${app.generatedQuestions.length} questions`);
-          }
-          return hasQuestions;
-        });
-        
-        console.log('Apps with questions:', appsWithQuestions.length);
-        
         if (filter === 'shortlisted') {
-          const filtered = appsWithQuestions.filter((app: Application) => 
-            app.status === 'Under Review' || app.status === 'Interview Scheduled'
+          // Show ONLY Interview Scheduled apps (truly shortlisted candidates)
+          const filtered = result.data.filter((app: Application) => 
+            app.status === 'Interview Scheduled'
           );
-          console.log('Filtered shortlisted apps:', filtered.length);
+          console.log('Filtered interview-scheduled apps:', filtered.length);
           setApplications(filtered);
         } else {
+          // For 'all' filter, show only apps with generated questions
+          const appsWithQuestions = result.data.filter((app: Application) => {
+            const hasQuestions = app.generatedQuestions && app.generatedQuestions.length > 0;
+            if (hasQuestions) {
+              console.log(`App ${app._id} has ${app.generatedQuestions.length} questions`);
+            }
+            return hasQuestions;
+          });
+          console.log('Apps with questions:', appsWithQuestions.length);
           setApplications(appsWithQuestions);
         }
       }
@@ -119,14 +119,67 @@ export default function ApplicationQuestionsPage() {
         // Find the application
         const app = applications.find(a => a._id === applicationId);
         if (app) {
-          setSelectedApp({
+          const updatedApp = {
             ...app,
             generatedQuestions: result.data.questions
-          });
+          };
+          setSelectedApp(updatedApp);
+          
+          // Update the applications list with the new question count
+          setApplications(prevApps => 
+            prevApps.map(a => 
+              a._id === applicationId 
+                ? { ...a, generatedQuestions: result.data.questions }
+                : a
+            )
+          );
         }
       }
     } catch (error) {
       console.error('Error fetching questions:', error);
+    }
+  };
+
+  // Manual generate questions function
+  const handleGenerateQuestions = async (applicationId: string) => {
+    try {
+      setGenerating(true);
+      const token = localStorage.getItem('token');
+      
+      const application = applications.find(a => a._id === applicationId);
+      if (!application) return;
+
+      console.log('Generating questions for:', application.jobId.title);
+      
+      const response = await fetch('/api/questions/generate', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          role: application.jobId.title,
+          num_questions: 10,
+          applicationId: applicationId
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success && result.data.questions) {
+        alert(`✅ Generated ${result.data.questions.length} questions successfully!`);
+        // Refresh applications to show new questions
+        await fetchApplications();
+        // Update selected app
+        await viewQuestions(applicationId);
+      } else {
+        alert(`❌ Failed to generate questions: ${result.error || 'Unknown error'}\n\nMake sure the Python service is running on port 8000.`);
+      }
+    } catch (error) {
+      console.error('Error generating questions:', error);
+      alert('❌ Error generating questions. Make sure the Python service is running on port 8000.');
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -142,8 +195,8 @@ export default function ApplicationQuestionsPage() {
             onChange={(e) => setFilter(e.target.value as 'all' | 'shortlisted')}
             className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="shortlisted">Shortlisted Only</option>
-            <option value="all">All Applications</option>
+            <option value="shortlisted">Interview Scheduled Only</option>
+            <option value="all">All with Questions</option>
           </select>
         </div>
       </div>
@@ -159,7 +212,9 @@ export default function ApplicationQuestionsPage() {
             <div className="text-center py-8 text-gray-500">Loading...</div>
           ) : applications.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              No applications with generated questions
+              {filter === 'shortlisted' 
+                ? 'No interviews scheduled yet' 
+                : 'No applications with generated questions'}
             </div>
           ) : (
             <div className="space-y-3 max-h-[calc(100vh-250px)] overflow-y-auto">
@@ -262,8 +317,21 @@ export default function ApplicationQuestionsPage() {
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    No questions generated for this application
+                  <div className="text-center py-8">
+                    <div className="text-gray-500 mb-4">
+                      <svg className="w-16 h-16 mx-auto mb-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="font-medium">No questions generated yet</p>
+                      <p className="text-sm mt-1">Click the button below to generate interview questions</p>
+                    </div>
+                    <button
+                      onClick={() => handleGenerateQuestions(selectedApp._id)}
+                      disabled={generating}
+                      className="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                      {generating ? 'Generating...' : '🤖 Generate Questions Now'}
+                    </button>
                   </div>
                 )}
               </div>

@@ -465,7 +465,7 @@ export default function AIInterviewerPanel({
           <div className="flex items-center gap-3">
             <MessageCircle className="w-5 h-5" />
             <div>
-              <div className="font-semibold">AI Interviewer</div>
+              <div className="font-semibold">TalkHire AI</div>
               <div className="text-xs opacity-90">{jobTitle || 'Position'} • Candidate: {candidateName || 'Candidate'}</div>
             </div>
           </div>

@@ -33,7 +33,7 @@ export interface IInterview extends Document {
     recordingUid: string;
     startedAt: Date;
     stoppedAt?: Date;
-    status: 'recording' | 'completed' | 'failed';
+    status: 'recording' | 'completed' | 'failed' | 'uploading';
     files?: Array<{
       filename: string;
       trackType: string;
@@ -42,6 +42,8 @@ export interface IInterview extends Document {
       isPlayable: boolean;
       sliceStartTime: number;
     }>;
+    megaLink?: string; // MEGA cloud storage link
+    localPath?: string; // Temporary local path before upload
   };
   createdAt: Date;
   updatedAt: Date;
@@ -160,7 +162,7 @@ const InterviewSchema = new Schema<IInterview>({
     stoppedAt: Date,
     status: {
       type: String,
-      enum: ['recording', 'completed', 'failed']
+      enum: ['recording', 'completed', 'failed', 'uploading']
     },
     files: [{
       filename: String,
@@ -169,7 +171,9 @@ const InterviewSchema = new Schema<IInterview>({
       mixedAllUser: Boolean,
       isPlayable: Boolean,
       sliceStartTime: Number
-    }]
+    }],
+    megaLink: String,
+    localPath: String
   }
 }, {
   timestamps: true

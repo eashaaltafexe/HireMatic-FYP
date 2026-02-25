@@ -19,7 +19,6 @@ export default function Sidebar() {
     { name: 'Role Management', path: '/admin/role-management' },
     { name: 'Reports', path: '/admin/reports' },
     { name: 'System Settings', path: '/admin/settings' },
-    { name: 'Chat Support', path: '/admin/support' },
   ];
 
   const handleLogout = () => {

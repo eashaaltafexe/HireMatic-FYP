@@ -26,6 +26,9 @@ export async function POST(request: NextRequest) {
 
     if (action === 'initialize') {
       // Initialize new interview session
+      console.log(`[Gemini API] 🔍 Initializing session for ${jobTitle} with ${questions.length} questions`);
+      console.log(`[Gemini API] 📋 First question: ${questions[0]?.text}`);
+      
       const greeting = `Hello ${candidateName}! Welcome to your interview for the ${jobTitle} position. I'm your AI interviewer today. I'll be asking you ${questions.length} questions about your experience and skills. Let's begin with the first question: ${questions[0]?.text}`;
       
       interviewSessions.set(sessionId, {
@@ -37,7 +40,8 @@ export async function POST(request: NextRequest) {
         startTime: Date.now()
       });
 
-      console.log(`[Gemini API] ✅ Session initialized with ${questions.length} questions`);
+      console.log(`[Gemini API] ✅ Session initialized with ${questions.length} questions for ${jobTitle}`);
+      console.log(`[Gemini API] 📊 Question categories: ${questions.map((q: any) => q.jobField).join(', ')}`);
 
       return NextResponse.json({
         success: true,
@@ -76,7 +80,9 @@ export async function POST(request: NextRequest) {
         const nextQuestion = session.questions[session.currentQuestionIndex];
         responseText = `Thank you for your answer. Now, the next question: ${nextQuestion.text}`;
         
-        console.log(`[Gemini API] Moving to question ${session.currentQuestionIndex + 1} of ${session.questions.length}`);
+        console.log(`[Gemini API] ✅ Moving to question ${session.currentQuestionIndex + 1} of ${session.questions.length}`);
+        console.log(`[Gemini API] 📋 Question ${session.currentQuestionIndex + 1}: ${nextQuestion.text}`);
+        console.log(`[Gemini API] 🏷️ Category: ${nextQuestion.jobField}`);
       } else {
         // Interview is complete
         responseText = `Thank you for your thoughtful answers throughout this interview. We appreciate your time and effort. We will review your responses and get back to you soon.`;

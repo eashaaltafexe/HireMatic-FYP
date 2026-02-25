@@ -103,6 +103,7 @@ const applicationSchema = new mongoose.Schema({
   interviewSession: {
     startedAt: Date,
     completedAt: Date,
+    pdfPath: String,
     answers: [{
       questionId: Number,
       questionText: String,

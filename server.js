@@ -33,6 +33,8 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 app.prepare().then(async () => {
+  console.log('\x1b[32m%s\x1b[0m', '✓ Next.js prepared successfully');
+  
   const server = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true);
@@ -55,6 +57,7 @@ app.prepare().then(async () => {
 
   server
     .once('error', (err) => {
+      console.error('\x1b[31m%s\x1b[0m', '❌ Server error:');
       console.error(err);
       process.exit(1);
     })
@@ -65,5 +68,20 @@ app.prepare().then(async () => {
       console.log(`   ➜ HTTP:      http://${hostname}:${port}`);
       console.log(`   ➜ WebSocket: ws://${hostname}:${port}/ws/transcribe`);
       console.log('');
+      console.log('\x1b[33m%s\x1b[0m', '⏳ Next.js is compiling... (this may take 30-60 seconds)');
+      console.log('\x1b[33m%s\x1b[0m', '   Visit http://localhost:3000 when ready');
+      console.log('');
     });
+  
+  // Keep the process alive
+  process.on('SIGTERM', () => {
+    console.log('\x1b[33m%s\x1b[0m', 'SIGTERM signal received: closing HTTP server');
+    server.close(() => {
+      console.log('HTTP server closed');
+    });
+  });
+}).catch((err) => {
+  console.error('\x1b[31m%s\x1b[0m', '❌ Failed to start server:');
+  console.error(err);
+  process.exit(1);
 }); 

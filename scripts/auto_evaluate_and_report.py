@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import sys
 import os
 import re
@@ -12,11 +13,17 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import inch
 import time
 
+# Set UTF-8 encoding for Windows console
+if sys.platform == 'win32':
+    import codecs
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
 # ----------------------------
 # CONFIG
 # ----------------------------
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyA7D4_BORnr-vC0s092YS_0r1LlZNllriQ')
-MONGO_URI = "mongodb+srv://hirematice_admin:DXVAd5aXWLuTeCR9@cluster0.6hifgaj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyDn5mxb-JB-PEFePtxqWmOhRzVIAmvKP8Q')
+MONGO_URI = "mongodb+srv://hirematice_admin:DXVAd5aXWLuTeCR9@cluster0.6hifgaj.mongodb.net/test?retryWrites=true&w=majority&appName=Cluster0"
 
 # Setup PDF output directory (absolute path)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -29,10 +36,60 @@ OUTPUT_PDF_TEMPLATE = os.path.join(OUTPUT_PDF_DIR, "HR_Interview_Report_{name}.p
 # Initialize Gemini (REST API)
 # ----------------------------
 print("Initializing Gemini API...")
-# Use gemini-2.5-flash - fast, capable, and available with your API key
-GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
-print("Using Gemini 2.5 Flash model")
-print("Gemini API initialized successfully")
+# Try multiple models in order of preference (using v1 API)
+GEMINI_MODELS = [
+    "models/gemini-2.5-flash",
+    "models/gemini-2.0-flash",
+    "models/gemini-2.5-flash-lite",
+    "models/gemini-2.0-flash-lite"
+]
+
+def test_gemini_model(model_name):
+    """Test if a Gemini model is available"""
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1/{model_name}:generateContent?key={GEMINI_API_KEY}"
+        test_payload = {
+            "contents": [{
+                "parts": [{"text": "Hello"}]
+            }]
+        }
+        response = requests.post(url, json=test_payload, timeout=10)
+        
+        if response.status_code == 403:
+            error_data = response.json()
+            error_msg = error_data.get('error', {}).get('message', '')
+            if 'leaked' in error_msg.lower():
+                print("\n" + "="*80)
+                print("[CRITICAL] API KEY LEAKED!")
+                print("="*80)
+                print("Your Gemini API key has been reported as leaked.")
+                print("\nTo fix this:")
+                print("1. Get new key: https://aistudio.google.com/app/apikey")
+                print("2. Update .env.local: GEMINI_API_KEY=your-new-key")
+                print("3. Restart server: npm run dev")
+                print("\nSee GEMINI_API_FIX_URGENT.md for details")
+                print("="*80 + "\n")
+                return False
+        
+        return response.status_code == 200
+    except:
+        return False
+
+# Find working model
+GEMINI_MODEL = None
+for model in GEMINI_MODELS:
+    print(f"Testing {model}...")
+    if test_gemini_model(model):
+        GEMINI_MODEL = model
+        print(f"[OK] Using {model}")
+        break
+
+if not GEMINI_MODEL:
+    print("[WARNING] No Gemini model available, will use fallback scoring")
+    GEMINI_MODEL = "models/gemini-2.5-flash"  # Default for URL construction
+
+GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+print("Gemini API initialized")
 
 EVAL_INSTRUCTIONS = """
 You are an objective HR technical evaluator. Evaluate the candidate's answer to the interview question.
@@ -84,7 +141,18 @@ def llm_evaluate(question, answer, ideal="", retry_count=2):
             }
             
             response = requests.post(GEMINI_API_URL, json=payload, timeout=30)
-            response.raise_for_status()
+            
+            # Check for errors before raising
+            if response.status_code != 200:
+                error_detail = response.text
+                print(f"Gemini API error (attempt {attempt+1}): {response.status_code}")
+                print(f"Error details: {error_detail[:500]}")
+                if attempt < retry_count - 1:
+                    time.sleep(2)  # Wait before retry
+                    continue
+                else:
+                    raise Exception(f"Gemini API failed: {response.status_code}")
+            
             result = response.json()
             
             # Extract text from response
@@ -115,7 +183,7 @@ def llm_evaluate(question, answer, ideal="", retry_count=2):
                 # First, try to parse as-is
                 try:
                     parsed = json.loads(json_text)
-                    print("✓ Parsed JSON successfully")
+                    print("[OK] Parsed JSON successfully")
                 except json.JSONDecodeError:
                     # If that fails, try cleaning it
                     json_text_clean = json_text.replace("'", '"')
@@ -123,7 +191,7 @@ def llm_evaluate(question, answer, ideal="", retry_count=2):
                     # This is a simple fix - may need more robust handling
                     try:
                         parsed = json.loads(json_text_clean)
-                        print("✓ Parsed JSON successfully (after cleaning)")
+                        print("[OK] Parsed JSON successfully (after cleaning)")
                     except json.JSONDecodeError as e:
                         print(f"JSON parse error (attempt {attempt+1}):", e)
                         if attempt < retry_count - 1:
@@ -180,7 +248,7 @@ def llm_evaluate(question, answer, ideal="", retry_count=2):
                 continue
     
     # Fallback scoring if all retries fail
-    print("⚠ Using fallback scoring")
+    print("[WARNING] Using fallback scoring")
     fb_score = fallback_score(answer)
     return {
         "relevance": fb_score / 10,
@@ -244,16 +312,28 @@ def synthesize_summary(name, per_q):
         strengths += le.get("strengths", [])
         weaknesses += le.get("weaknesses", [])
         keywords += le.get("keywords", [])
+    
+    # Determine hiring recommendation based on overall score
+    if overall >= 70:
+        recommendation = f"RECOMMENDED FOR HIRE - The candidate scored {overall}/100, demonstrating strong competency and suitability for the position. Proceed to next interview round."
+        overall_paragraph = "Candidate shows strong technical understanding and is suitable for the role."
+        hiring_decision = "RECOMMENDED"
+    else:
+        recommendation = f"NOT RECOMMENDED FOR HIRE - The candidate scored {overall}/100, which is below the minimum threshold of 70. The candidate needs significant improvement in key areas before being considered for this position."
+        overall_paragraph = "Candidate shows some understanding but requires significant improvement in key areas to meet the position requirements."
+        hiring_decision = "NOT RECOMMENDED"
+    
     summary = {
         "overall_score": overall,
+        "hiring_decision": hiring_decision,
         "top_strengths": [s for s,_ in Counter(strengths).most_common(6)],
         "top_weaknesses": [w for w,_ in Counter(weaknesses).most_common(6)],
         "tech_skills": keywords[:12],
-        "overall_paragraph": "Candidate shows strong technical understanding and is suitable.",
+        "overall_paragraph": overall_paragraph,
         "problem_paragraph": "Candidate applies structured problem-solving approaches.",
         "communication_paragraph": "Clear and concise communicator.",
         "project_highlights": ["TalentTalk Project: AI-powered voice interview system."],
-        "recommendation": "Recommended for next interview round."
+        "recommendation": recommendation
     }
     return summary
 
@@ -271,6 +351,12 @@ def generate_pdf(name, position, summary, per_q, interview_date):
         header = f"<b>Candidate:</b> {name} &nbsp;&nbsp; <b>Position:</b> {position} &nbsp;&nbsp; <b>Date:</b> {interview_date}"
         story.append(Paragraph(header, body))
         story.append(Spacer(1, 12))
+        
+        # Hiring Decision (Prominent)
+        decision_style = ParagraphStyle('decision', parent=styles['Heading2'], fontSize=14, leading=18, textColor='green' if summary.get('hiring_decision') == 'RECOMMENDED' else 'red')
+        story.append(Paragraph(f"<b>HIRING DECISION: {summary.get('hiring_decision', 'PENDING')}</b>", decision_style))
+        story.append(Spacer(1, 12))
+        
         story.append(Paragraph(f"<b>Overall Score:</b> {summary['overall_score']} / 100", body))
         story.append(Spacer(1, 12))
         story.append(Paragraph("<b>Candidate Suitability:</b>", body))
@@ -303,7 +389,7 @@ def generate_pdf(name, position, summary, per_q, interview_date):
                 story.append(Paragraph(f"Feedback: {p['llm_eval']['brief']}", body))
             story.append(Spacer(1, 8))
         doc.build(story)
-        print(f"✓ PDF generated successfully: {filename}")
+        print(f"[OK] PDF generated successfully: {filename}")
         return filename
     except Exception as e:
         print(f"✗ PDF generation failed: {str(e)}")
@@ -323,7 +409,7 @@ if __name__ == "__main__":
     try:
         client = MongoClient(MONGO_URI)
         db = client['test']
-        print("✓ Connected to MongoDB")
+        print("[OK] Connected to MongoDB")
     except Exception as e:
         print(f"✗ MongoDB connection failed: {str(e)}")
         exit(1)
@@ -337,7 +423,7 @@ if __name__ == "__main__":
         print("No unevaluated interview answers found.")
         exit(1)
     
-    print(f"✓ Found application: {app['_id']}")
+    print(f"[OK] Found application: {app['_id']}")
     print(f"  Answers count: {len(app['interviewSession']['answers'])}")
     qa_pairs = [
         {
@@ -378,12 +464,12 @@ if __name__ == "__main__":
         )
         
         if update_result.modified_count > 0:
-            print("\n✓ MongoDB updated successfully")
+            print("\n[OK] MongoDB updated successfully")
             print(f"  - Evaluation flag: True")
             print(f"  - PDF path: {rel_pdf_path}")
             print(f"  - Overall score: {summary['overall_score']}")
         else:
-            print("\n⚠ MongoDB update did not modify document")
+            print("\n[WARNING] MongoDB update did not modify document")
     else:
         print("\n✗ PDF generation failed - MongoDB not updated")
         print("  Marking as evaluated anyway with score...")

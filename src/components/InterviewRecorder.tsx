@@ -146,8 +146,13 @@ export default function InterviewRecorder({
     }
   };
 
-  // Don't render UI in test mode
-  if (interviewId.startsWith('TEST-')) {
+  // Don't render UI in test mode or if there's an error
+  if (interviewId.startsWith('TEST-') || error) {
+    return null;
+  }
+
+  // Only show the UI when actively recording (hide when not recording)
+  if (!isRecording && !isLoading) {
     return null;
   }
 
@@ -158,51 +163,19 @@ export default function InterviewRecorder({
           <div className="flex items-center gap-2">
             {isLoading ? (
               <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
-            ) : isRecording ? (
-              <Video className="w-5 h-5 text-green-600" />
-            ) : error ? (
-              <AlertCircle className="w-5 h-5 text-red-600" />
             ) : (
-              <VideoOff className="w-5 h-5 text-gray-400" />
+              <Video className="w-5 h-5 text-green-600" />
             )}
             
             <div>
               <p className="text-sm font-semibold text-gray-800">
-                {isLoading ? 'Processing...' : isRecording ? 'Recording' : error ? 'Error' : 'Not Recording'}
+                {isLoading ? 'Starting...' : 'Recording'}
               </p>
-              {error && (
-                <p className="text-xs text-red-600 max-w-[150px] truncate" title={error}>
-                  {error}
-                </p>
-              )}
               {isRecording && (
                 <p className="text-xs text-gray-500">Cloud recording active</p>
               )}
             </div>
           </div>
-
-          {/* Manual controls (optional) */}
-          {!autoStart && (
-            <div className="flex gap-1">
-              {!isRecording ? (
-                <button
-                  onClick={startRecording}
-                  disabled={isLoading}
-                  className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Start
-                </button>
-              ) : (
-                <button
-                  onClick={stopRecording}
-                  disabled={isLoading}
-                  className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Stop
-                </button>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Recording indicator pulse */}

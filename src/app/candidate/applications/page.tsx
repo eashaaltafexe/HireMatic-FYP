@@ -555,10 +555,10 @@ export default function ApplicationsPage() {
                       Evaluated on {format(new Date(selectedApplication.evaluation.evaluationDate), 'MMM dd, yyyy')}
                     </div>
                     {/* PDF Report Download Link */}
-                    {selectedApplication.interviewSession && selectedApplication.interviewSession.pdfPath && (
+                    {(selectedApplication as any).interviewSession && (selectedApplication as any).interviewSession.pdfPath && (
                       <div className="mt-4">
                         <a
-                          href={`/${selectedApplication.interviewSession.pdfPath}`}
+                          href={`/${(selectedApplication as any).interviewSession.pdfPath}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"

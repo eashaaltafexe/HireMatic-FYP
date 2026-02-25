@@ -3,12 +3,14 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Mic, MicOff, Video, VideoOff, Phone, CheckCircle, Clock } from 'lucide-react';
 import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack } from 'agora-rtc-sdk-ng';
+import InterviewRecorder from './InterviewRecorder';
 
 interface Question {
   id: number;
   text: string;
   type?: string;
   difficulty?: string;
+  jobField?: string;
 }
 
 interface VirtualInterviewerProps {
@@ -47,6 +49,10 @@ export default function VirtualInterviewer({
   const [questionTimer, setQuestionTimer] = useState(90);
   const [answers, setAnswers] = useState<any[]>([]);
   const [interviewStarted, setInterviewStarted] = useState(false);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isEndingInterview, setIsEndingInterview] = useState(false);
+  const [screenRecordingStatus, setScreenRecordingStatus] = useState<'idle' | 'requesting' | 'recording' | 'stopped'>('idle');
   
   const recognitionRef = useRef<any>(null);
   const clientRef = useRef<IAgoraRTCClient | null>(null);
@@ -55,6 +61,11 @@ export default function VirtualInterviewer({
   const questionTimerIntervalRef = useRef<any>(null);
   const localVideoRef = useRef<HTMLDivElement>(null);
   const sessionIdRef = useRef<string>(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+  
+  // Screen recording refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const displayStreamRef = useRef<MediaStream | null>(null);
 
   // Initialize Agora
   useEffect(() => {
@@ -67,7 +78,18 @@ export default function VirtualInterviewer({
   // Start interview after Agora is ready
   useEffect(() => {
     if (interviewStarted) {
+      console.log('🚀 Interview started! Questions prop:', questions);
+      console.log('📊 Number of questions:', questions?.length);
+      if (!questions || questions.length === 0) {
+        console.error('❌ CRITICAL: No questions provided to VirtualInterviewer!');
+        alert('Error: No interview questions loaded. Please refresh and try again.');
+        return;
+      }
       initializeGeminiInterview();
+      // Start screen recording after interview starts
+      setTimeout(() => {
+        startScreenRecording();
+      }, 2000);
     }
   }, [interviewStarted]);
 
@@ -112,8 +134,12 @@ export default function VirtualInterviewer({
   const initializeGeminiInterview = async () => {
     try {
       console.log('🎬 Initializing Gemini interview...');
-      console.log('Session ID:', sessionIdRef.current);
-      console.log('Questions:', questions);
+      console.log('📋 Job Title:', jobTitle);
+      console.log('👤 Candidate:', candidateName);
+      console.log('🔑 Session ID:', sessionIdRef.current);
+      console.log('❓ Total Questions:', questions.length);
+      console.log('📊 Question Categories:', questions.map(q => q.jobField || 'Unknown').join(', '));
+      console.log('📝 First Question:', questions[0]?.text);
       
       const response = await fetch('/api/interviews/gemini', {
         method: 'POST',
@@ -351,20 +377,25 @@ export default function VirtualInterviewer({
         };
 
         setAnswers(prev => [...prev, newAnswer]);
+        console.log(`[Submit] ✅ Answer saved for question ${currentQuestionIndex + 1}`);
 
         // Update AI message and speak
         setAiMessage(data.response);
+        console.log(`[Submit] 🗣️ Speaking response: ${data.response.substring(0, 50)}...`);
         await speak(data.response);
 
         // Update question index
         if (data.questionIndex !== undefined) {
+          console.log(`[Submit] 📊 Moving to question index: ${data.questionIndex} (Question ${data.questionIndex + 1} of ${questions.length})`);
           setCurrentQuestionIndex(data.questionIndex);
         }
 
         if (data.shouldContinue) {
+          console.log(`[Submit] ▶️ Continuing interview - ${questions.length - data.questionIndex} questions remaining`);
           setIsAnswering(true);
           startQuestionTimer();
         } else {
+          console.log(`[Submit] 🏁 Interview complete - all ${questions.length} questions answered`);
           endInterview();
         }
       } else {
@@ -402,17 +433,50 @@ export default function VirtualInterviewer({
     }
   };
 
-  const endInterview = () => {
+  const endInterview = async () => {
+    if (isEndingInterview) {
+      console.log('[Interview] Already ending interview, skipping...');
+      return;
+    }
+
+    setIsEndingInterview(true);
+    console.log('[Interview] 🏁 Ending interview...');
+    
+    // Stop answering and timers
     setIsAnswering(false);
     stopQuestionTimer();
     
+    // Stop speech recognition
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+        console.log('[Interview] Stopped speech recognition');
+      } catch (e) {
+        console.log('[Interview] Speech recognition already stopped');
+      }
     }
 
-    if (onComplete) {
-      onComplete(answers);
+    // Stop TTS if speaking
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
     }
+
+    // Stop screen recording
+    console.log('[Interview] Stopping screen recording...');
+    await stopScreenRecording();
+    
+    // Wait a moment for recording to finalize
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Show completion modal
+    setShowCompletionModal(true);
+    
+    // Call onComplete callback after a short delay to allow modal to show
+    setTimeout(() => {
+      if (onComplete) {
+        onComplete(answers);
+      }
+    }, 500);
   };
 
   const toggleAudio = () => {
@@ -434,6 +498,176 @@ export default function VirtualInterviewer({
         localVideoTrackRef.current.setEnabled(true);
       }
       setVideoEnabled(!videoEnabled);
+    }
+  };
+
+  const startScreenRecording = async () => {
+    try {
+      console.log('[Screen Recording] 🎬 Starting screen recording...');
+      setScreenRecordingStatus('requesting');
+
+      // Request screen share with system audio
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          // @ts-ignore - cursor is a valid DisplayMediaStreamConstraints property
+          cursor: 'always',
+          // @ts-ignore - displaySurface is a valid DisplayMediaStreamConstraints property
+          displaySurface: 'monitor',
+        } as any,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100,
+        } as any,
+      });
+
+      displayStreamRef.current = displayStream;
+      console.log('[Screen Recording] ✅ Screen share granted');
+
+      // Create combined stream with screen video + microphone audio
+      const combinedStream = new MediaStream();
+
+      // Add screen video
+      displayStream.getVideoTracks().forEach(track => {
+        combinedStream.addTrack(track);
+        console.log('[Screen Recording] Added screen video track');
+      });
+
+      // Add system audio if available
+      displayStream.getAudioTracks().forEach(track => {
+        combinedStream.addTrack(track);
+        console.log('[Screen Recording] Added system audio track');
+      });
+
+      // Add microphone audio
+      if (localAudioTrackRef.current) {
+        const micTrack = localAudioTrackRef.current.getMediaStreamTrack();
+        combinedStream.addTrack(micTrack);
+        console.log('[Screen Recording] 🎤 Added microphone audio');
+      }
+
+      // Initialize MediaRecorder
+      recordedChunksRef.current = [];
+      
+      let mimeType = 'video/webm;codecs=vp9,opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'video/webm;codecs=vp8,opus';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = 'video/webm';
+        }
+      }
+      console.log('[Screen Recording] Using mimeType:', mimeType);
+
+      const mediaRecorder = new MediaRecorder(combinedStream, {
+        mimeType: mimeType,
+        videoBitsPerSecond: 2500000,
+        audioBitsPerSecond: 128000,
+      });
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+          console.log(`[Screen Recording] 📦 Chunk ${recordedChunksRef.current.length}: ${event.data.size} bytes`);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        console.log(`[Screen Recording] ⏹️ Recording stopped! Total chunks: ${recordedChunksRef.current.length}`);
+        setScreenRecordingStatus('stopped');
+        
+        // Stop display stream tracks
+        if (displayStreamRef.current) {
+          displayStreamRef.current.getTracks().forEach(track => track.stop());
+        }
+        
+        // Save the recording
+        await saveScreenRecording();
+      };
+
+      mediaRecorder.onerror = (event: any) => {
+        console.error('[Screen Recording] ❌ Error:', event.error);
+        setScreenRecordingStatus('idle');
+      };
+
+      mediaRecorder.onstart = () => {
+        console.log('[Screen Recording] 🔴 Recording started');
+        setScreenRecordingStatus('recording');
+      };
+
+      // Handle when user stops sharing screen
+      displayStream.getVideoTracks()[0].onended = () => {
+        console.log('[Screen Recording] User stopped screen sharing');
+        if (mediaRecorder.state === 'recording') {
+          mediaRecorder.stop();
+        }
+      };
+
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start(1000); // Collect data every second
+
+      console.log(`[Screen Recording] ✅ Started with ${combinedStream.getVideoTracks().length} video + ${combinedStream.getAudioTracks().length} audio tracks`);
+      
+    } catch (error: any) {
+      console.error('[Screen Recording] ❌ Failed to start:', error);
+      setScreenRecordingStatus('idle');
+      
+      if (error.name === 'NotAllowedError') {
+        alert('Screen recording permission denied. The interview will continue, but screen recording will not be available.');
+      } else {
+        alert(`Screen recording error: ${error.message}. The interview will continue without screen recording.`);
+      }
+    }
+  };
+
+  const stopScreenRecording = async () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      console.log('[Screen Recording] Stopping recording...');
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  const saveScreenRecording = async () => {
+    if (recordedChunksRef.current.length === 0) {
+      console.log('[Screen Recording] No chunks to save');
+      return;
+    }
+
+    try {
+      console.log('[Screen Recording] 💾 Saving recording...');
+      
+      const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+      const fileSize = blob.size;
+      console.log(`[Screen Recording] Created blob: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
+
+      // Create FormData to upload
+      const formData = new FormData();
+      formData.append('recording', blob, `interview-${interviewId}-${Date.now()}.webm`);
+      formData.append('interviewId', interviewId);
+      formData.append('applicationId', applicationId);
+
+      const token = localStorage.getItem('token');
+      
+      console.log('[Screen Recording] Uploading to server...');
+      const response = await fetch('/api/interviews/upload-recording', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        console.log('[Screen Recording] ✅ Recording saved successfully:', result.data);
+        setIsRecording(true); // Mark as recorded
+      } else {
+        console.error('[Screen Recording] ❌ Failed to save:', result.error);
+        // Still allow interview to complete
+      }
+    } catch (error) {
+      console.error('[Screen Recording] ❌ Error saving recording:', error);
+      // Don't block interview completion
     }
   };
 
@@ -487,6 +721,17 @@ export default function VirtualInterviewer({
       {/* Questions Panel - Right 1/3 */}
       <div className="w-1/3 bg-gradient-to-b from-purple-900 to-indigo-900 p-6 overflow-y-auto">
         <div className="text-white">
+          {/* Recording Status Banner */}
+          {screenRecordingStatus === 'recording' && (
+            <div className="mb-4 bg-red-500/20 border border-red-500 rounded-lg p-3 flex items-center gap-2">
+              <div className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
+              </div>
+              <span className="text-sm font-semibold">Screen Recording Active</span>
+            </div>
+          )}
+          
           <h2 className="text-2xl font-bold mb-4">{jobTitle} Interview</h2>
           
           {/* Question Progress */}
@@ -537,7 +782,7 @@ export default function VirtualInterviewer({
 
           {/* Status */}
           <div className="text-center mt-6">
-            {isBotSpeaking && <p className="text-yellow-400">🤖 AI Speaking...</p>}
+            {isBotSpeaking && <p className="text-yellow-400">🤖 TalkHire Speaking...</p>}
             {isAnswering && !isBotSpeaking && <p className="text-green-400">🎤 Listening...</p>}
           </div>
 
@@ -552,9 +797,98 @@ export default function VirtualInterviewer({
             </button>
           )}
 
-
         </div>
       </div>
+
+      {/* Interview Recorder - Auto-records entire interview */}
+      <InterviewRecorder
+        interviewId={interviewId}
+        token={typeof window !== 'undefined' ? localStorage.getItem('token') || undefined : undefined}
+        autoStart={true}
+        onRecordingStart={(data) => {
+          console.log('🔴 Recording started:', data);
+          setIsRecording(true);
+        }}
+        onRecordingStop={(data) => {
+          console.log('⏹️ Recording stopped:', data);
+          setIsRecording(false);
+        }}
+        onError={(error) => console.error('❌ Recording error:', error)}
+      />
+
+      {/* Completion Modal */}
+      {showCompletionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 text-center animate-slideUp">
+            {/* Success Icon */}
+            <div className="mb-6">
+              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-12 h-12 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">Interview Completed! 🎉</h2>
+            </div>
+
+            {/* Message */}
+            <div className="mb-6 space-y-3">
+              <p className="text-lg text-gray-700">
+                Thank you for completing the interview!
+              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <Video className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-blue-900 mb-1">
+                      {screenRecordingStatus === 'stopped' || isRecording
+                        ? '✅ Your interview has been recorded'
+                        : '📹 Your interview session has been saved'}
+                    </p>
+                    <p className="text-sm text-blue-700">
+                      {screenRecordingStatus === 'stopped' || isRecording
+                        ? 'The screen recording with audio and your responses have been saved successfully. Our team will review them and get back to you soon.'
+                        : 'Your responses have been saved successfully. Our team will review them and get back to you soon.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Next Steps */}
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2">What happens next?</h3>
+              <ul className="text-sm text-gray-600 space-y-2 text-left">
+                <li className="flex items-start gap-2">
+                  <CheckCircle size={16} className="text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>Your interview recording will be reviewed by our team</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle size={16} className="text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>You'll receive your evaluation results via email</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle size={16} className="text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>Check your dashboard for updates on your application</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Action Button */}
+            <button
+              onClick={() => {
+                window.location.href = '/candidate/applications';
+              }}
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl"
+            >
+              View My Applications
+            </button>
+
+            <p className="text-xs text-gray-500 mt-4">
+              You can close this window now
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -170,10 +170,10 @@ export default function TestInterviewerPage() {
               </svg>
             </div>
             <h1 className="text-4xl font-bold text-gray-800 mb-3">
-              AI Interviewer Test
+              TalkHire Interviewer Test
             </h1>
             <p className="text-lg text-gray-600">
-              Test the AI-powered voice interviewer
+              Test the TalkHire voice interviewer
             </p>
           </div>
 
@@ -187,7 +187,7 @@ export default function TestInterviewerPage() {
             <ul className="space-y-2 text-sm text-gray-700">
               <li className="flex items-start gap-2">
                 <span className="text-blue-600 mt-1">•</span>
-                <span><strong>Voice Interaction:</strong> AI will speak questions, you answer via voice</span>
+                <span><strong>Voice Interaction:</strong> TalkHire will speak questions, you answer via voice</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-blue-600 mt-1">•</span>
@@ -195,7 +195,7 @@ export default function TestInterviewerPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-blue-600 mt-1">•</span>
-                <span><strong>AI Evaluation:</strong> Powered by Gemini AI - evaluates your answers</span>
+                <span><strong>Intelligent Evaluation:</strong> Powered by TalkHire - evaluates your answers</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-blue-600 mt-1">•</span>
